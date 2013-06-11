@@ -9,8 +9,31 @@ class Fdoc::Endpoint
 
   def initialize(endpoint_path, service=Fdoc::Service.default_service)
     @endpoint_path = endpoint_path
-    @schema = YAML.load_file(@endpoint_path)
+    @schema = partial(@endpoint_path)
     @service = service
+  end
+
+  def partial(file)
+    file = "#{File.dirname(file)}/_#{File.basename(file)}.fdoc" unless file =~ %r{\.fdoc$}
+    _schema = YAML.load(ERB.new(File.read(file)).result(binding))
+    process_partials(_schema)
+  end
+
+  def process_partials(schema)
+    schema.inject({}) do |h, (k, v)|
+      if v.is_a?(Hash)
+        h[k] = process_partials(v)
+      elsif v.is_a?(Array)
+        h[k] = v.map do |vv|
+          vv.is_a?(Hash) ? process_partials(vv) : vv
+        end
+      elsif k.to_s == 'partial'
+        h.merge! partial(v)
+      else
+        h[k] = v
+      end
+      h
+    end
   end
 
   def consume_request(params, successful=true)
