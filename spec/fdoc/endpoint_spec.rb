@@ -33,6 +33,71 @@ describe Fdoc::Endpoint do
     end
   end
 
+  describe "#process_partials" do
+    let(:schema) do
+      {
+        :a => {
+          :a1 => 'a1',
+          :partial => 'a_partial',
+        },
+        :b => [
+          {
+            :b1a => 'b1a',
+            :partial => 'b1_partial',
+          },
+          {
+            :b2 => 'b2',
+          }
+        ]
+      }
+    end
+    before do
+      endpoint.should_receive(:partial).with('a_partial').and_return(:a_partial => 'processed')
+      endpoint.should_receive(:partial).with('b1_partial').and_return(:b1_partial => 'processed')
+    end
+    it "detects 'partial' key and processes it" do
+      h = endpoint.process_partials(schema)
+      h[:a].should == {
+        :a1 => 'a1',
+        :a_partial => 'processed',
+      }
+      h[:b].first.should == {
+        :b1a => 'b1a',
+        :b1_partial => 'processed',
+      }
+    end
+  end
+
+  describe "#partial" do
+    let(:yaml_erb_data) { "---\n:a: <%= 555 %>\n" }
+    before do
+      File.stub(:read).and_return(yaml_erb_data)
+      endpoint.stub(:process_partials).and_return(:a => 555)
+    end
+    context 'with a normal fdoc view file' do
+      let(:file_path) { '/foo/bar/fdoc/view.fdoc' }
+      it 'reads the file' do
+        File.should_receive(:read).with(file_path).and_return(yaml_erb_data)
+        endpoint.partial(file_path)
+      end
+      it 'processes the loaded schema' do
+        endpoint.should_receive(:process_partials).with(:a => 555).and_return(:a => 555)
+        endpoint.partial(file_path)
+      end
+    end
+    context 'with a fdoc partial view' do
+      let(:file_path) { '/foo/bar/fdoc/a/partial' }
+      it 'reads the file' do
+        File.should_receive(:read).with('/foo/bar/fdoc/a/_partial.fdoc').and_return(yaml_erb_data)
+        endpoint.partial(file_path)
+      end
+      it 'processes the loaded schema' do
+        endpoint.should_receive(:process_partials).with(:a => 555).and_return(:a => 555)
+        endpoint.partial(file_path)
+      end
+    end
+  end
+
   describe "#consume_request" do
     subject { endpoint.consume_request(params) }
     let(:params) {
